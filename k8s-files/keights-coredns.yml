@@ -11,12 +11,12 @@ kind: ClusterRole
 metadata:
   name: keights-coredns
 rules:
-  - apiGroups: [""]
+  - apiGroups: [ "" ]
     resources:
       - services
     verbs:
       - watch
-  - apiGroups: [""]
+  - apiGroups: [ "" ]
     resources:
       - configmaps
     verbs:
@@ -62,6 +62,14 @@ spec:
         - name: keights-coredns
           image: nexus.isc.co.ir/dev/keights-coredns
           imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health/liveness
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health/readiness
 
 ---
 
