@@ -8,5 +8,5 @@ metadata:
 spec:
   containers:
     - name: busybox
-      image: nexus.isc.co.ir/busybox:1.32
+      image: busybox:1.32
       tty: true

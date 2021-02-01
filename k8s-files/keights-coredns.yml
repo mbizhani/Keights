@@ -34,9 +34,9 @@ subjects:
     name: keights-coredns
     namespace: keights
 roleRef:
+  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: keights-coredns
-  apiGroup: rbac.authorization.k8s.io
 
 ---
 
@@ -60,16 +60,16 @@ spec:
       serviceAccountName: keights-coredns
       containers:
         - name: keights-coredns
-          image: nexus.isc.co.ir/dev/keights-coredns
+          image: dev/keights-coredns
           imagePullPolicy: Always
-          livenessProbe:
-            httpGet:
-              port: 8080
-              path: /actuator/health/liveness
-          readinessProbe:
-            httpGet:
-              port: 8080
-              path: /actuator/health/readiness
+#          livenessProbe:
+#            httpGet:
+#              port: 8080
+#              path: /actuator/health/liveness
+#          readinessProbe:
+#            httpGet:
+#              port: 8080
+#              path: /actuator/health/readiness
 
 ---
 
