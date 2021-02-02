@@ -2,6 +2,8 @@ server:
   shutdown: graceful
 
 spring:
+  profiles:
+    active: prod
   lifecycle:
     timeout-per-shutdown-phase: 20s
 
@@ -10,3 +12,14 @@ spring:
 #    health:
 #      probes:
 #        enabled: true
+
+---
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    org.devocative: debug

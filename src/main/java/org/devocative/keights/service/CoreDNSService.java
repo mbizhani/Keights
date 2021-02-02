@@ -42,7 +42,7 @@ public class CoreDNSService {
 	private final List<RewriteRequest> REQUESTS = Collections.synchronizedList(new ArrayList<>());
 
 	private final Pattern clusterDomainNamePattern = Pattern.compile("kubernetes +([\\w.]+) ");
-	private final Pattern rewritePattern = Pattern.compile("rewrite +name +(exact +)?(.+) +(.+)");
+	private final Pattern rewritePattern = Pattern.compile("rewrite\\s+name\\s+(exact)?\\s*(?<SRC>(?![-.])[\\w-.]*\\w)\\s+(?<DST>(?![-.])[\\w-.]*\\w)");
 
 	private String clusterDomainName;
 	private V1ConfigMap coreDNSV1ConfigMap;
@@ -111,7 +111,8 @@ public class CoreDNSService {
 		initialDelayString = "#{coreDNSProperties.rewriteTaskInitDelay}",
 		fixedDelayString = "#{coreDNSProperties.rewriteTaskDelay}")
 	public void processRequests() {
-		log.info("Start Processing Rewrite Requests");
+		log.debug("Start Processing Rewrite Requests");
+
 		if (!coreDNSConfigProcessed.get()) {
 			log.warn("CoreDNS Not Inited!");
 			return;
@@ -261,7 +262,7 @@ public class CoreDNSService {
 	@Getter
 	@Setter
 	@Accessors(chain = true)
-	@ToString()
+	@ToString
 	private static class RewriteRequest {
 		private String type;
 		private String domainName;
