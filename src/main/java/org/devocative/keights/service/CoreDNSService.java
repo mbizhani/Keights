@@ -1,11 +1,14 @@
 package org.devocative.keights.service;
 
-import com.google.gson.reflect.TypeToken;
+import io.kubernetes.client.informer.ResourceEventHandler;
+import io.kubernetes.client.informer.SharedIndexInformer;
+import io.kubernetes.client.informer.SharedInformerFactory;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.V1ConfigMap;
+import io.kubernetes.client.openapi.models.V1ConfigMapList;
 import io.kubernetes.client.openapi.models.V1Service;
-import io.kubernetes.client.util.Watch;
+import io.kubernetes.client.openapi.models.V1ServiceList;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -13,8 +16,8 @@ import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.devocative.keights.config.CoreDNSProperties;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -34,7 +37,7 @@ import java.util.stream.Stream;
 @Service
 public class CoreDNSService {
 	private final CoreV1Api coreV1Api;
-	private final TaskExecutor taskExecutor;
+	private final ThreadPoolTaskExecutor taskExecutor;
 	private final CoreDNSProperties properties;
 
 	private final AtomicBoolean coreDNSConfigProcessed = new AtomicBoolean(false);
@@ -44,6 +47,7 @@ public class CoreDNSService {
 	private final Pattern clusterDomainNamePattern = Pattern.compile("kubernetes +([\\w.]+) ");
 	private final Pattern rewritePattern = Pattern.compile("rewrite\\s+name\\s+(exact)?\\s*(?<SRC>(?![-.])[\\w-.]*\\w)\\s+(?<DST>(?![-.])[\\w-.]*\\w)");
 
+	private SharedInformerFactory informerFactory;
 	private String clusterDomainName;
 	private V1ConfigMap coreDNSV1ConfigMap;
 
@@ -51,60 +55,80 @@ public class CoreDNSService {
 
 	@PostConstruct
 	public void init() {
-		taskExecutor.execute(() -> {
-			try (Watch<V1ConfigMap> watch = createCoreDNCConfigMapWatch()) {
-				watch.forEach(rs -> {
-					coreDNSConfigProcessed.set(false);
-					log.info("Watch CoreDNS CM: type=[{}]", rs.type);
+		informerFactory = new SharedInformerFactory(coreV1Api.getApiClient(), taskExecutor.getThreadPoolExecutor());
 
-					coreDNSV1ConfigMap = rs.object;
-					final var coreDNSConfig = rs.object
-						.getData()
-						.get(properties.getConfigMapDataKey());
-					log.info("Watcher CoreDNS CM:\n{}", coreDNSConfig);
+		final SharedIndexInformer<V1ConfigMap> v1ConfigMapSII = informerFactory.sharedIndexInformerFor(params -> {
+			log.debug("CoreDNSConfigMap, SharedIndexInformerFor.CallGeneratorParams: " +
+					"resourceVersion=[{}], timeoutSeconds=[{}], watch=[{}]",
+				params.resourceVersion, params.timeoutSeconds, params.watch);
 
-					final var matcher = clusterDomainNamePattern.matcher(coreDNSConfig);
-					if (matcher.find()) {
-						clusterDomainName = matcher.group(1);
-						log.info("Cluster DomainName = [{}]", clusterDomainName);
-					}
+			return coreV1Api.listNamespacedConfigMapCall(
+				properties.getConfigMapNamespace(),
+				null,
+				null,
+				null,
+				"metadata.name=" + properties.getConfigMapName(),
+				null,
+				null,
+				params.resourceVersion,
+				null,
+				params.timeoutSeconds,
+				params.watch,
+				null);
+		}, V1ConfigMap.class, V1ConfigMapList.class);
+		v1ConfigMapSII.addEventHandler(new ResourceEventHandler<>() {
+			@Override
+			public void onAdd(V1ConfigMap obj) {
+				watchCoreDNSConfigMap("ADD", obj);
+			}
 
-					final var rewrites = extractRewrites(coreDNSConfig);
-					log.info("Watcher CoreDNS CM: rewrites={}", rewrites);
+			@Override
+			public void onUpdate(V1ConfigMap oldObj, V1ConfigMap newObj) {
+				watchCoreDNSConfigMap("UPDATE", newObj);
+			}
 
-					REWRITES.clear();
-					REWRITES.putAll(rewrites);
-					coreDNSConfigProcessed.set(true);
-				});
-			} catch (Exception e) {
-				log.error("K8sService Watch CoreDNS CM Task", e);
+			@Override
+			public void onDelete(V1ConfigMap obj, boolean deletedFinalStateUnknown) {
 			}
 		});
 
-		taskExecutor.execute(() -> {
-			try (Watch<V1Service> watch = createServiceWatch()) {
+		final SharedIndexInformer<V1Service> v1ServicesSII = informerFactory.sharedIndexInformerFor(params -> {
+			log.debug("Services, SharedIndexInformerFor.CallGeneratorParams: " +
+					"resourceVersion=[{}], timeoutSeconds=[{}], watch=[{}]",
+				params.resourceVersion, params.timeoutSeconds, params.watch);
 
-				log.info("Watcher Created!");
+			return coreV1Api.listServiceForAllNamespacesCall(
+				null,
+				null,
+				null,
+				null,
+				null,
+				null,
+				params.resourceVersion,
+				null,
+				params.timeoutSeconds,
+				params.watch,
+				null);
 
-				watch.forEach(rs -> {
-					log.info("Watch Service: type=[{}] name=[{}]", rs.type, rs.object.getMetadata().getName());
+		}, V1Service.class, V1ServiceList.class);
+		v1ServicesSII.addEventHandler(new ResourceEventHandler<>() {
+			@Override
+			public void onAdd(V1Service obj) {
+				watchServices("ADD", obj);
+			}
 
-					final var annotationKey = properties.getRewriteConfig().getAnnotation();
-					final var annotations = rs.object.getMetadata().getAnnotations();
-					if (annotations != null && annotations.containsKey(annotationKey)) {
-						final var request = new RewriteRequest()
-							.setType(rs.type)
-							.setDomainName(annotations.get(annotationKey))
-							.setServiceName(rs.object.getMetadata().getName())
-							.setServiceNamespace(rs.object.getMetadata().getNamespace());
-						log.info("Watch Service: Request={}", request);
-						REQUESTS.add(request);
-					}
-				});
-			} catch (Exception e) {
-				log.error("K8sService Watch Services Task", e);
+			@Override
+			public void onUpdate(V1Service oldObj, V1Service newObj) {
+				watchServices("UPDATE", newObj);
+			}
+
+			@Override
+			public void onDelete(V1Service obj, boolean deletedFinalStateUnknown) {
+				watchServices("DELETE", obj);
 			}
 		});
+
+		informerFactory.startAllRegisteredInformers();
 	}
 
 	@Scheduled(
@@ -174,41 +198,44 @@ public class CoreDNSService {
 
 	// ------------------------------
 
-	private Watch<V1Service> createServiceWatch() throws ApiException {
-		return Watch.createWatch(coreV1Api.getApiClient(), coreV1Api
-				.listServiceForAllNamespacesCall(
-					null,
-					null,
-					null,
-					null,
-					null,
-					null,
-					null,
-					null,
-					null,
-					Boolean.TRUE,
-					null),
-			new TypeToken<Watch.Response<V1Service>>() {
-			}.getType());
+	private void watchCoreDNSConfigMap(String event, V1ConfigMap configMap) {
+		coreDNSConfigProcessed.set(false);
+		log.info("Watch CoreDNS CM: event=[{}]", event);
+
+		coreDNSV1ConfigMap = configMap;
+		final var coreDNSConfig = configMap
+			.getData()
+			.get(properties.getConfigMapDataKey());
+		log.info("Watcher CoreDNS CM:\n{}", coreDNSConfig);
+
+		final var matcher = clusterDomainNamePattern.matcher(coreDNSConfig);
+		if (matcher.find()) {
+			clusterDomainName = matcher.group(1);
+			log.info("Cluster DomainName = [{}]", clusterDomainName);
+		}
+
+		final var rewrites = extractRewrites(coreDNSConfig);
+		log.info("Watcher CoreDNS CM: rewrites={}", rewrites);
+
+		REWRITES.clear();
+		REWRITES.putAll(rewrites);
+		coreDNSConfigProcessed.set(true);
 	}
 
-	private Watch<V1ConfigMap> createCoreDNCConfigMapWatch() throws ApiException {
-		return Watch.createWatch(coreV1Api.getApiClient(), coreV1Api
-				.listNamespacedConfigMapCall(
-					properties.getConfigMapNamespace(),
-					null,
-					null,
-					null,
-					"metadata.name=" + properties.getConfigMapName(),
-					null,
-					null,
-					null,
-					null,
-					null,
-					Boolean.TRUE,
-					null),
-			new TypeToken<Watch.Response<V1ConfigMap>>() {
-			}.getType());
+	private void watchServices(String event, V1Service v1Service) {
+		log.info("Watch Service: type=[{}] name=[{}]", event, v1Service.getMetadata().getName());
+
+		final var annotationKey = properties.getRewriteConfig().getAnnotation();
+		final var annotations = v1Service.getMetadata().getAnnotations();
+		if (annotations != null && annotations.containsKey(annotationKey)) {
+			final var request = new RewriteRequest()
+				.setType(event)
+				.setDomainName(annotations.get(annotationKey))
+				.setServiceName(v1Service.getMetadata().getName())
+				.setServiceNamespace(v1Service.getMetadata().getNamespace());
+			log.info("Watch Service: Request={}", request);
+			REQUESTS.add(request);
+		}
 	}
 
 	private Map<String, String> extractRewrites(String coreDnsConfig) {
