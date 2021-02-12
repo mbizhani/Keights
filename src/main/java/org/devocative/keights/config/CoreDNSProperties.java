@@ -15,7 +15,7 @@ public class CoreDNSProperties {
 	private String configMapDataKey = "Corefile";
 	private String configMapName = "coredns";
 	private String configMapNamespace = "kube-system";
-	private Duration rewriteTaskInitDelay = Duration.ofSeconds(20);
+//	private Duration rewriteTaskInitDelay = Duration.ofSeconds(20);
 	private Duration rewriteTaskDelay = Duration.ofSeconds(20);
 	private RewriteConfig rewriteConfig = new RewriteConfig();
 

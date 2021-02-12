@@ -1,7 +1,6 @@
 package org.devocative.keights.service;
 
 import io.kubernetes.client.informer.ResourceEventHandler;
-import io.kubernetes.client.informer.SharedIndexInformer;
 import io.kubernetes.client.informer.SharedInformerFactory;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
@@ -13,10 +12,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.devocative.keights.config.CoreDNSProperties;
 import org.devocative.keights.iservice.ICoreDNSService;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.devocative.keights.dto.EEventType.*;
 
@@ -27,7 +28,9 @@ public class KeightsWatchService {
 	private final CoreV1Api coreV1Api;
 	private final CoreDNSProperties properties;
 	private final ICoreDNSService coreDNSService;
+	private final TaskScheduler taskScheduler;
 
+	private final AtomicBoolean hasTask = new AtomicBoolean(false);
 	private V1ConfigMap coreDNSV1ConfigMap;
 
 	// ------------------------------
@@ -36,7 +39,7 @@ public class KeightsWatchService {
 	public void init() {
 		final var informerFactory = new SharedInformerFactory();
 
-		final SharedIndexInformer<V1ConfigMap> v1ConfigMapSII = informerFactory.sharedIndexInformerFor(params -> {
+		final var v1ConfigMapSII = informerFactory.sharedIndexInformerFor(params -> {
 			log.debug("CoreDNSConfigMap, SharedIndexInformerFor.CallGeneratorParams: " +
 					"resourceVersion=[{}], timeoutSeconds=[{}], watch=[{}]",
 				params.resourceVersion, params.timeoutSeconds, params.watch);
@@ -80,7 +83,7 @@ public class KeightsWatchService {
 			}
 		});
 
-		final SharedIndexInformer<V1Service> v1ServicesSII = informerFactory.sharedIndexInformerFor(params -> {
+		final var v1ServicesSII = informerFactory.sharedIndexInformerFor(params -> {
 			log.debug("Services, SharedIndexInformerFor.CallGeneratorParams: " +
 					"resourceVersion=[{}], timeoutSeconds=[{}], watch=[{}]",
 				params.resourceVersion, params.timeoutSeconds, params.watch);
@@ -103,29 +106,39 @@ public class KeightsWatchService {
 			@Override
 			public void onAdd(V1Service obj) {
 				final var md = obj.getMetadata();
-				coreDNSService.handleService(Added, md.getName(), md.getNamespace(), md.getAnnotations());
+				final var rqAdded = coreDNSService.handleService(Added, md.getName(), md.getNamespace(), md.getAnnotations());
+				if (rqAdded) {
+					resetTask();
+				}
 			}
 
 			@Override
 			public void onUpdate(V1Service oldObj, V1Service newObj) {
 				final var md = newObj.getMetadata();
-				coreDNSService.handleService(Updated, md.getName(), md.getNamespace(), md.getAnnotations());
+				final var rqAdded = coreDNSService.handleService(Updated, md.getName(), md.getNamespace(), md.getAnnotations());
+				if (rqAdded) {
+					resetTask();
+				}
 			}
 
 			@Override
 			public void onDelete(V1Service obj, boolean deletedFinalStateUnknown) {
 				final var md = obj.getMetadata();
-				coreDNSService.handleService(Deleted, md.getName(), md.getNamespace(), md.getAnnotations());
+				final var rqAdded = coreDNSService.handleService(Deleted, md.getName(), md.getNamespace(), md.getAnnotations());
+				if (rqAdded) {
+					resetTask();
+				}
 			}
 		});
 
 		informerFactory.startAllRegisteredInformers();
 	}
 
-	@Scheduled(
-		initialDelayString = "#{coreDNSProperties.rewriteTaskInitDelay}",
-		fixedDelayString = "#{coreDNSProperties.rewriteTaskDelay}")
-	public void processRequests() {
+	// ------------------------------
+
+	private void processRequests() {
+		hasTask.set(false);
+
 		final var coreDNSConfig = coreDNSV1ConfigMap.getData().get(properties.getConfigMapDataKey());
 		final var optionalConfig = coreDNSService.processRequests(coreDNSConfig);
 		optionalConfig.ifPresent(config -> {
@@ -133,8 +146,6 @@ public class KeightsWatchService {
 			replaceCoreDNSV1ConfigMap();
 		});
 	}
-
-	// ------------------------------
 
 	private void replaceCoreDNSV1ConfigMap() {
 		try {
@@ -148,6 +159,13 @@ public class KeightsWatchService {
 		} catch (ApiException e) {
 			log.error("writeCoreDNSV1ConfigMap", e);
 			throw new RuntimeException(e);
+		}
+	}
+
+	private synchronized void resetTask() {
+		if (!hasTask.get()) {
+			taskScheduler.schedule(this::processRequests, Instant.now().plus(properties.getRewriteTaskDelay()));
+			hasTask.set(true);
 		}
 	}
 }

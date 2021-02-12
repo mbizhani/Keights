@@ -9,7 +9,7 @@ import java.util.Optional;
 public interface ICoreDNSService {
 	void handleCoreDNSConfigMap(EEventType event, String coreDNSConfig);
 
-	void handleService(EEventType event, String name, String namespace, Map<String, String> annotations);
+	boolean handleService(EEventType event, String name, String namespace, Map<String, String> annotations);
 
 	Optional<String> processRequests(String coreDNSConfig);
 

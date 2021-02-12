@@ -53,9 +53,10 @@ public class CoreDNSService implements ICoreDNSService {
 	}
 
 	@Override
-	public void handleService(EEventType event, String name, String namespace, Map<String, String> annotations) {
+	public boolean handleService(EEventType event, String name, String namespace, Map<String, String> annotations) {
 		log.info("Handle Service: event=[{}] name=[{}]", event, name);
 
+		boolean rqAdded = false;
 		final var annotationKey = properties.getRewriteConfig().getAnnotation();
 		if (annotations != null && annotations.containsKey(annotationKey)) {
 			final var request = new RewriteRequest()
@@ -65,12 +66,15 @@ public class CoreDNSService implements ICoreDNSService {
 				.setServiceNamespace(namespace);
 			log.info("Handle Service: Add Rq={}", request);
 			REQUESTS.add(request);
+			rqAdded = true;
 		}
+
+		return rqAdded;
 	}
 
 	@Override
 	public Optional<String> processRequests(String coreDNSConfig) {
-		log.debug("Start Processing Rewrite Requests");
+		log.info("Start Processing Rewrite Requests");
 
 		if (!coreDNSConfigProcessed.get()) {
 			log.warn("CoreDNS Not Inited!");
