@@ -12,8 +12,8 @@ import java.time.Duration;
 @Component
 @ConfigurationProperties(prefix = "keights.coredns")
 public class CoreDNSProperties {
-	private String configMapDataKey = "Corefile";
-	private String configMapName = "coredns";
+	private String configMapKey = "Corefile";
+	private String configMap = "coredns";
 	private String configMapNamespace = "kube-system";
 	private Duration rewriteTaskDelay = Duration.ofSeconds(4);
 	private RewriteConfig rewriteConfig = new RewriteConfig();

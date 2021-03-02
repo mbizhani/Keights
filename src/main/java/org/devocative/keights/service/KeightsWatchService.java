@@ -49,7 +49,7 @@ public class KeightsWatchService {
 				null,
 				null,
 				null,
-				"metadata.name=" + properties.getConfigMapName(),
+				"metadata.name=" + properties.getConfigMap(),
 				null,
 				null,
 				params.resourceVersion,
@@ -63,7 +63,7 @@ public class KeightsWatchService {
 			public void onAdd(V1ConfigMap obj) {
 				final var coreDNSConfig = obj
 					.getData()
-					.get(properties.getConfigMapDataKey());
+					.get(properties.getConfigMapKey());
 				coreDNSV1ConfigMap = obj;
 				coreDNSService.handleCoreDNSConfigMap(Added, coreDNSConfig);
 			}
@@ -72,7 +72,7 @@ public class KeightsWatchService {
 			public void onUpdate(V1ConfigMap oldObj, V1ConfigMap newObj) {
 				final var coreDNSConfig = newObj
 					.getData()
-					.get(properties.getConfigMapDataKey());
+					.get(properties.getConfigMapKey());
 				coreDNSV1ConfigMap = newObj;
 				coreDNSService.handleCoreDNSConfigMap(Updated, coreDNSConfig);
 			}
@@ -139,10 +139,10 @@ public class KeightsWatchService {
 	private void processRequests() {
 		hasTask.set(false);
 
-		final var coreDNSConfig = coreDNSV1ConfigMap.getData().get(properties.getConfigMapDataKey());
+		final var coreDNSConfig = coreDNSV1ConfigMap.getData().get(properties.getConfigMapKey());
 		final var optionalConfig = coreDNSService.processRequests(coreDNSConfig);
 		optionalConfig.ifPresent(config -> {
-			coreDNSV1ConfigMap.getData().put(properties.getConfigMapDataKey(), config);
+			coreDNSV1ConfigMap.getData().put(properties.getConfigMapKey(), config);
 			replaceCoreDNSV1ConfigMap();
 		});
 	}
@@ -150,7 +150,7 @@ public class KeightsWatchService {
 	private void replaceCoreDNSV1ConfigMap() {
 		try {
 			coreV1Api.replaceNamespacedConfigMap(
-				properties.getConfigMapName(),
+				properties.getConfigMap(),
 				properties.getConfigMapNamespace(),
 				coreDNSV1ConfigMap,
 				null,
