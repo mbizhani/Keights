@@ -10,6 +10,7 @@ import io.kubernetes.client.openapi.models.V1Service;
 import io.kubernetes.client.openapi.models.V1ServiceList;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.devocative.keights.KeightsException;
 import org.devocative.keights.config.CoreDNSProperties;
 import org.devocative.keights.iservice.ICoreDNSService;
 import org.springframework.scheduling.TaskScheduler;
@@ -136,13 +137,21 @@ public class KeightsWatchService {
 
 	// ------------------------------
 
+	private V1ConfigMap getCoreDNSV1ConfigMap() {
+		if (coreDNSV1ConfigMap == null) {
+			throw new KeightsException("CoreDNS ConfigMap Not Found: name=[%s] namespace=[%s]",
+				properties.getConfigMap(), properties.getConfigMapNamespace());
+		}
+		return coreDNSV1ConfigMap;
+	}
+
 	private void processRequests() {
 		hasTask.set(false);
 
-		final var coreDNSConfig = coreDNSV1ConfigMap.getData().get(properties.getConfigMapKey());
+		final var coreDNSConfig = getCoreDNSV1ConfigMap().getData().get(properties.getConfigMapKey());
 		final var optionalConfig = coreDNSService.processRequests(coreDNSConfig);
 		optionalConfig.ifPresent(config -> {
-			coreDNSV1ConfigMap.getData().put(properties.getConfigMapKey(), config);
+			getCoreDNSV1ConfigMap().getData().put(properties.getConfigMapKey(), config);
 			replaceCoreDNSV1ConfigMap();
 		});
 	}
@@ -152,13 +161,13 @@ public class KeightsWatchService {
 			coreV1Api.replaceNamespacedConfigMap(
 				properties.getConfigMap(),
 				properties.getConfigMapNamespace(),
-				coreDNSV1ConfigMap,
+				getCoreDNSV1ConfigMap(),
 				null,
 				null,
 				null);
 		} catch (ApiException e) {
 			log.error("writeCoreDNSV1ConfigMap", e);
-			throw new RuntimeException(e);
+			throw new KeightsException(e);
 		}
 	}
 

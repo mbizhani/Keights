@@ -2,6 +2,7 @@ package org.devocative.keights.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.devocative.keights.KeightsException;
 import org.devocative.keights.config.CoreDNSProperties;
 import org.devocative.keights.dto.EEventType;
 import org.devocative.keights.dto.RewriteRequest;
@@ -119,9 +120,8 @@ public class CoreDNSService implements ICoreDNSService {
 					//TODO
 					break;
 				default:
-					throw new RuntimeException("Unsupported Event: " + request.getEvent());
+					throw new KeightsException("Unsupported Event: %s", request.getEvent());
 			}
-
 		}
 
 		if (modified) {

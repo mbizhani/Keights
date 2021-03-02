@@ -30,7 +30,7 @@ public class KeightsApplication {
 
 			return new CoreV1Api(client);
 		} catch (IOException e) {
-			throw new RuntimeException(e);
+			throw new KeightsException(e);
 		}
 	}
 
