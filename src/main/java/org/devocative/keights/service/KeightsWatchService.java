@@ -38,6 +38,8 @@ public class KeightsWatchService {
 
 	@PostConstruct
 	public void init() {
+		log.info("*** KeightsWatchService.INIT: {}", properties.toString());
+
 		final var informerFactory = new SharedInformerFactory();
 
 		final var v1ConfigMapSII = informerFactory.sharedIndexInformerFor(params -> {

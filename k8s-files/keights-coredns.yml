@@ -64,6 +64,11 @@ spec:
         - name: keights-coredns
           image: ${REG_URL}/dev/keights-coredns
           imagePullPolicy: Always
+          env:
+            - name: keights.coredns.config-map
+              value: ${COREDNS_CONFIGMAP}
+            - name: keights.coredns.config-map-namespace
+              value: ${COREDNS_CONFIGMAP_NAMESPACE}
 #          livenessProbe:
 #            httpGet:
 #              port: 8080
