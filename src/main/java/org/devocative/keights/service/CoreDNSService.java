@@ -60,11 +60,7 @@ public class CoreDNSService implements ICoreDNSService {
 		boolean rqAdded = false;
 		final var annotationKey = properties.getRewriteConfig().getAnnotation();
 		if (annotations != null && annotations.containsKey(annotationKey)) {
-			final var request = new RewriteRequest()
-				.setEvent(event)
-				.setDomainName(annotations.get(annotationKey))
-				.setServiceName(name)
-				.setServiceNamespace(namespace);
+			final var request = new RewriteRequest(event, annotations.get(annotationKey), name, namespace);
 			log.info("Handle Service: Add Rq={}", request);
 			REQUESTS.add(request);
 			rqAdded = true;

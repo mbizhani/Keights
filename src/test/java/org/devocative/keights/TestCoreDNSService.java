@@ -104,10 +104,10 @@ public class TestCoreDNSService {
 		assertEquals(1, coreDNSService.getRewritesSize());
 
 		assertTrue(coreDNSService.hasRewrite(
-			new RewriteRequest("mytest.site.wsx", "test", "default")));
+			new RewriteRequest(Added, "mytest.site.wsx", "test", "default")));
 
 		assertFalse(coreDNSService.hasRewrite(
-			new RewriteRequest("mytest.site.wsx", "foo", "default")));
+			new RewriteRequest(Added, "mytest.site.wsx", "foo", "default")));
 	}
 
 	@Test
@@ -167,7 +167,7 @@ public class TestCoreDNSService {
 		assertEquals(expectedCoreDNSConfig, newConfig);
 
 		assertTrue(coreDNSService.hasRewrite(
-			new RewriteRequest("test.site.wsx", "test", "default")));
+			new RewriteRequest(Added, "test.site.wsx", "test", "default")));
 
 	}
 }
